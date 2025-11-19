@@ -1,0 +1,54 @@
+name: Build AOSP 7.1 for J200H
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DEVICE: j23g
+      AOSP_BRANCH: android-7.1.2_r36 # Example AOSP tag
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y git-core gnupg flex bison gperf build-essential \
+        zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 \
+        libncurses5-dev x11proto-core-dev libx11-dev lib32z-dev ccache \
+        libgl1-mesa-dev libxml2-utils xsltproc unzip python-is-python3
+
+
+      - name: Initialize AOSP repo
+        run: |
+          mkdir aosp && cd aosp
+          repo init -u https://android.googlesource.com/platform/manifest -b $AOSP_BRANCH
+          repo sync -c -j4
+
+      - name: Copy device tree
+        run: |
+          cp -r $GITHUB_WORKSPACE/device/samsung/$DEVICE aosp/device/samsung/$DEVICE
+          cp -r $GITHUB_WORKSPACE/vendor/samsung/$DEVICE aosp/vendor/samsung/$DEVICE
+
+      - name: Setup environment
+        run: |
+          cd aosp
+          source build/envsetup.sh
+          lunch aosp_$DEVICE-userdebug
+
+      - name: Build ROM
+        run: |
+          cd aosp
+          mka -j$(nproc) system boot
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aosp-build
+          path: |
+            aosp/out/target/product/$DEVICE/boot.img
+            aosp/out/target/product/$DEVICE/system.img
